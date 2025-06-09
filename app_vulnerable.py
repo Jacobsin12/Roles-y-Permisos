@@ -3,6 +3,8 @@ import sqlite3
 import jwt
 import datetime
 from functools import wraps
+from werkzeug.security import generate_password_hash
+
 
 app = Flask(__name__)
 app.config['DEBUG'] = True
@@ -209,17 +211,28 @@ def register():
     if not all(field in data for field in fields):
         return jsonify({"error": "Faltan campos"}), 400
 
+    # Hashear la contraseña
+    hashed_password = generate_password_hash(data['password'])
+
     try:
         with sqlite3.connect("database.db") as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO users (username, password, email, birthdate, secret_question, secret_answer)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (data['username'], data['password'], data['email'], data['birthdate'], data['secret_question'], data['secret_answer']))
+            """, (
+                data['username'],
+                hashed_password,  # Usamos la contraseña hasheada
+                data['email'],
+                data['birthdate'],
+                data['secret_question'],
+                data['secret_answer']
+            ))
             conn.commit()
         return jsonify({"message": "Usuario registrado exitosamente"}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "El nombre de usuario ya existe"}), 409
+
 
 @app.route('/admin/data')
 @token_required
