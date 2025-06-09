@@ -1,2 +1,13 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
-*
+# Ignorar la carpeta del entorno virtual
+venv/
+
+# Ignorar carpetas y archivos compilados de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos de entorno, logs y bases de datos temporales
+.env
+*.log
+*.sqlite3
