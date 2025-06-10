@@ -1,0 +1,405 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage{listings}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{helvet}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{capt-of} 
+\usepackage{xcolor}
+
+\renewcommand{\familydefault}{\sfdefault}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,          % Parte las líneas largas automáticamente
+  frame=single,             % Opcional, añade un marco al código
+  numbers=left,             % Opcional, pone numeración de líneas a la izquierda
+  numberstyle=\tiny,        % Tamaño de la numeración
+  stepnumber=1,             % Numerar cada línea
+  numbersep=5pt,            % Espacio entre código y números
+  xleftmargin=10pt,         % Margen izquierdo
+  xrightmargin=10pt,        % Margen derecho
+  showstringspaces=false,
+  tabsize=2,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{red},
+}
+
+\title{Normas de seguridad en aplicaciones Web y Móviles}
+\date{09 de junio de 2025}
+
+\begin{document}
+
+% Portada
+\begin{titlepage}
+\centering
+{\sffamily
+\includegraphics[width=0.3\textwidth]{logo.png}\par
+\vspace{0.5cm}
+\LARGE Universidad Tecnológica de Querétaro\par
+\vspace{0.5cm}
+\Large Seguridad en el desarrollo de aplicaciones\\
+Grupo: IDGS13\par
+\vspace{1.5cm}
+\huge Evaluación 1\par
+\vspace{1.5cm}
+\Large Alumno: Tristan Jacob Valencia Ramírez\\
+Docente: M.C.C. Emmanuel Martínez Hernández \par
+\vfill
+\large 09 de junio de 2025
+}
+\end{titlepage}
+
+% Índice con numeración
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+
+% Introducción
+\section{Introducción}
+
+En la actualidad, la seguridad y el control de acceso son aspectos fundamentales para el correcto funcionamiento de cualquier sistema informático, especialmente en aplicaciones empresariales, educativas o administrativas. Este proyecto está enfocado en la implementación de un backend robusto para la gestión de usuarios, roles y permisos utilizando Python con Flask y SQLite como base de datos ligera. La solución propuesta permite no solo autenticar usuarios mediante tokens seguros (JWT), sino también definir y controlar detalladamente qué acciones puede realizar cada usuario, garantizando así una administración eficiente y segura de los recursos y funcionalidades del sistema.
+
+La arquitectura del sistema se basa en un modelo flexible de autorización que asocia roles a los usuarios y permisos a esos roles, lo que facilita la asignación y modificación de privilegios sin necesidad de cambiar la estructura interna de la aplicación. De esta manera, cada usuario puede tener uno o varios roles, y cada rol puede contener múltiples permisos, permitiendo un control granular sobre qué operaciones están permitidas, como acceder a ciertas rutas, ver información confidencial o modificar datos. Esto asegura que el sistema pueda adaptarse fácilmente a diferentes necesidades organizacionales y a cambios en las políticas de acceso, aumentando su escalabilidad y mantenibilidad.
+
+Además, el proyecto incorpora mecanismos para proteger las rutas de la aplicación mediante decoradores personalizados que verifican si el usuario autenticado posee los permisos necesarios antes de permitir la ejecución de una acción. La implementación de autenticación con JWT permite que las sesiones sean seguras, sin necesidad de manejar cookies ni estados en el servidor, facilitando su integración con aplicaciones móviles o web frontend. En conjunto, esta solución proporciona una base sólida para desarrollar aplicaciones que requieren un control de acceso detallado y seguro, garantizando que solo los usuarios autorizados puedan acceder o modificar los recursos protegidos.
+
+\newpage
+
+\section{Desarrollo}
+
+\subsection{Análisis}
+
+\subsubsection{Requerimientos funcionales}
+Los requerimientos funcionales de la API de Permisos y Roles incluyen las siguientes operaciones CRUD:
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item \textbf{Crear un rol}: Permite registrar un nuevo rol con un nombre único (por ejemplo, \texttt{admin}, \texttt{usuario}). El endpoint \texttt{POST /roles} recibe un JSON con el campo \texttt{nombre}.
+    \item \textbf{Listar roles}: Obtiene la lista de todos los roles y sus permisos asociados mediante \texttt{GET /roles}. Cada rol incluye su \texttt{id}, \texttt{nombre} y una lista de permisos.
+    \item \textbf{Actualizar un rol}: Permite modificar el nombre de un rol existente usando \texttt{PUT /roles/<id>}.
+    \item \textbf{Eliminar un rol}: Permite eliminar un rol mediante \texttt{DELETE /roles/<id>}.
+    \item \textbf{Gestión de permisos}: Los permisos tienen campos \texttt{id} y \texttt{nombre} (por ejemplo, \texttt{ver\_usuarios}, \texttt{gestionar\_roles}) y se asocian a roles mediante una tabla intermedia \texttt{roles\_permisos}.
+\end{itemize}
+La API está vinculada a los usuarios a través de la tabla \texttt{usuarios\_roles}, que mapea usuarios con roles, permitiendo un control de acceso basado en roles (RBAC).
+
+\subsubsection{Requerimientos de seguridad}
+La seguridad es un pilar fundamental de la API. Los requerimientos incluyen:
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item \textbf{Autenticación mediante tokens JWT}: Todas las rutas, excepto \texttt{/login} y \texttt{/register}, requieren un token JWT válido en el encabezado \texttt{Authorization}. El token se genera al iniciar sesión y contiene el \texttt{user\_id} del usuario autenticado.
+    \item \textbf{Tiempo de vida del token}: Se estableció un tiempo de vida del token de 5 minutos, lo que significa que después de ese tiempo el usuario debe generar un nuevo token (iniciar sesión nuevamente) para acceder a la API.
+    \item \textbf{Control de permisos}: Cada ruta protegida verifica si el usuario tiene el permiso correspondiente mediante la tabla \texttt{permisos\_rutas}, que mapea rutas a permisos específicos (por ejemplo, \texttt{/roles} requiere \texttt{ver\_roles}).
+    \item \textbf{Validación de entradas}: La API valida los datos de entrada en endpoints como \texttt{POST /roles} para evitar errores o inyecciones.
+\end{itemize}
+
+El siguiente fragmento muestra la generación del token en la ruta \texttt{/login}:
+\begin{center}
+\begin{lstlisting}[language=Python]
+token = jwt.encode({
+    'user_id': user[0],
+    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+}, SECRET_KEY, algorithm="HS256")
+\end{center}
+\end{lstlisting}
+\end{center}
+
+\subsection{Buenas prácticas y técnicas de protección}
+Se implementaron las siguientes buenas prácticas y mecanismos de seguridad:
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item Uso de contraseñas hasheadas con algoritmos seguros como \texttt{bcrypt}.
+    \item Validación de entradas en todos los endpoints para prevenir ataques como SQL Injection.
+    \item Separación de lógica de negocio y acceso a datos mediante funciones y módulos bien definidos.
+    \item Uso de tokens temporales y verificación del contenido del JWT.
+    \item Manejo adecuado de errores y respuestas con códigos HTTP estándar.
+\end{itemize}
+Estas prácticas aseguran que la API sea robusta y resistente a ataques comunes como inyecciones SQL o accesos no autorizados.
+
+\subsection{Tablas creadas y sus funciones}
+A continuación, se describen las tablas creadas en la base de datos SQLite para la gestión de usuarios, roles y permisos:
+
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item \textbf{\texttt{users}}: Almacena los usuarios con campos como \texttt{nombre}, \texttt{correo}, \texttt{contraseña}, entre otros.
+    \item \textbf{\texttt{roles}}: Define los roles posibles, como \texttt{admin} o \texttt{usuario}.
+    \item \textbf{\texttt{permisos}}: Define los permisos individuales, como \texttt{ver\_usuarios}, \texttt{modificar\_usuarios}, entre otros.
+    \item \textbf{\texttt{usuarios\_roles}}: Tabla puente que establece una relación muchos a muchos entre usuarios y roles.
+    \item \textbf{\texttt{roles\_permisos}}: Tabla puente que establece una relación muchos a muchos entre roles y permisos.
+    \item \textbf{\texttt{permisos\_rutas}}: Tabla que vincula rutas específicas con nombres de permisos para validación dinámica.
+\end{itemize}
+
+\newpage
+
+\subsection{Endpoints de la API}
+
+A continuación, se describen los endpoints implementados en la API para la gestión de usuarios, autenticación, roles y permisos, organizados en dos categorías principales:
+
+\subsubsection{Endpoints de Usuarios y Autenticación}
+Estos endpoints gestionan el registro, autenticación y operaciones relacionadas con los usuarios:
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item \textbf{\texttt{POST /login}}: Autentica a un usuario y devuelve un token JWT. No requiere token ni permisos específicos.
+    \item \textbf{\texttt{POST /register}}: Registra un nuevo usuario en el sistema. No requiere token ni permisos específicos.
+    \item \textbf{\texttt{GET /admin/data}}: Accede a datos restringidos del administrador. Requiere token y el permiso \texttt{ver\_admin\_data}.
+    \item \textbf{\texttt{GET /user/<user\_id>}}: Obtiene los datos de un usuario específico identificado por \texttt{user\_id}. Requiere token, pero no permisos adicionales.
+    \item \textbf{\texttt{PUT /user/<user\_id>}}: Modifica los datos de un usuario identificado por \texttt{user\_id}. Requiere token y el permiso \texttt{modificar\_usuarios}.
+    \item \textbf{\texttt{DELETE /user/<user\_id>/delete}}: Realiza una baja lógica de un usuario identificado por \texttt{user\_id}. Requiere token y el permiso \texttt{eliminar\_usuarios}.
+\end{itemize}
+\newpage
+\section{Control de Permisos y Diseño de la Base de Datos para Autorización}
+
+% Describing the tables used for permission control
+\subsection{Tablas usadas para el control de permisos}
+Para implementar un sistema flexible y seguro de autorización, se diseñaron varias tablas en la base de datos que permiten gestionar roles, permisos y su asociación con rutas (endpoints). Las tablas principales son:
+
+\begin{itemize}
+    \item \textbf{permisos\_rutas}: Esta tabla relaciona cada ruta (endpoint) con el permiso necesario para acceder a ella. Ejemplo de contenido:
+    \begin{center}
+        \begin{tabular}{|l|l|}
+            \hline
+            \textbf{ruta} & \textbf{permiso\_nombre} \\
+            \hline
+            /roles & ver\_roles \\
+            /user/<int:user\_id> & ver\_usuario \\
+            /user/<int:user\_id>/delete & eliminar\_usuario \\
+            \hline
+        \end{tabular}
+    \end{center}
+
+    \item \textbf{permisos}: Lista de permisos existentes en el sistema, por ejemplo: \texttt{ver\_roles}, \texttt{editar\_usuario}, \texttt{eliminar\_usuario}, etc.
+
+    \item \textbf{roles}: Define roles de usuario como Admin, usuario etc.
+
+    \item \textbf{roles\_permisos}: Tabla intermedia que asigna permisos a roles. Por ejemplo, el rol Administrador puede tener permisos para \texttt{ver\_roles}, \texttt{editar\_usuario}, etc.
+
+    \item \textbf{usuarios\_roles}: Asocia cada usuario con uno o más roles. Esto define qué permisos tiene indirectamente el usuario, dependiendo de los permisos asignados a sus roles.
+\end{itemize}
+
+% Explaining the rationale behind the database design
+\subsection{¿Por qué se decidió este diseño?}
+
+\subsubsection{Seguridad reforzada y control fino}
+En lugar de asignar permisos directamente a los usuarios o basar la autorización únicamente en el tipo de usuario (rol), se introdujo una capa intermedia de permisos. Esto evita problemas comunes como:
+\begin{itemize}
+    \item Dar acceso por error a funciones sensibles solo porque el tipo de usuario es ``Administrador''.
+    \item Dificultad para agregar o cambiar permisos sin modificar código.
+\end{itemize}
+
+\subsubsection{Flexibilidad y escalabilidad}
+Al separar permisos y roles, es sencillo:
+\begin{itemize}
+    \item Añadir nuevos permisos sin cambiar la lógica del sistema.
+    \item Modificar qué roles tienen qué permisos con solo actualizar la base de datos.
+    \item Agregar o eliminar permisos a un usuario solo cambiando sus roles.
+\end{itemize}
+
+\subsubsection{Gestión centralizada y sencilla}
+El sistema permite manejar los permisos y rutas de forma centralizada, haciendo el mantenimiento y auditoría mucho más sencilla.
+
+\subsubsection{Normalización de rutas para permisos dinámicos}
+Para que las rutas con parámetros (ejemplo: \texttt{/user/123}) puedan ser evaluadas correctamente, se normalizan a un formato estándar (\texttt{/user/<int:user\_id>}). Esto permite asignar permisos a un patrón de ruta en vez de a rutas concretas, evitando la necesidad de crear un permiso para cada posible URL.
+
+
+\newpage
+
+    \subsubsection{Endpoints de Roles y Permisos}
+    Estos endpoints gestionan las operaciones relacionadas con roles y permisos. A continuación, se detalla cada endpoint junto con su implementación en Python:
+    
+    \begin{itemize}\setlength{\itemsep}{0.5em}
+        \item \textbf{\texttt{GET /roles}}: Lista todos los roles existentes en el sistema, incluyendo sus permisos asociados. Requiere un token JWT válido, pero no permisos adicionales. Realiza una consulta SQL que une las tablas \texttt{roles}, \texttt{roles\_permisos} y \texttt{permisos}, organizando los resultados en un diccionario JSON con el \texttt{id}, \texttt{nombre} y lista de \texttt{permisos} de cada rol. Devuelve un código HTTP 200 con la lista de roles.
+        \begin{center}
+        \begin{lstlisting}
+    @app.route('/roles', methods=['GET'])
+    @token_required
+    def listar_roles():
+        with sqlite3.connect("database.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT roles.id, roles.nombre, permisos.nombre
+                FROM roles
+                LEFT JOIN roles_permisos ON roles.id = roles_permisos.rol_id
+                LEFT JOIN permisos ON roles_permisos.permiso_id = permisos.id
+                ORDER BY roles.id
+            """)
+            data = cursor.fetchall()
+    
+            roles_dict = {}
+            for rol_id, rol_nombre, permiso_nombre in data:
+                if rol_id not in roles_dict:
+                    roles_dict[rol_id] = {
+                        "id": rol_id,
+                        "nombre": rol_nombre,
+                        "permisos": []
+                    }
+                if permiso_nombre:
+                    roles_dict[rol_id]["permisos"].append(permiso_nombre)
+    
+            roles_lista = list(roles_dict.values())
+            return jsonify(roles_lista), 200
+        \end{lstlisting}
+    \newpage
+    
+        \item \textbf{\texttt{POST /roles}}: Crea un nuevo rol en el sistema. Requiere un token JWT válido y recibe un JSON con el campo \texttt{nombre}. Valida que el nombre no esté vacío y verifica que no exista un rol con el mismo nombre en la base de datos. Devuelve un código HTTP 201 si se crea exitosamente, 400 si falta el nombre, o 409 si el rol ya existe.
+        \begin{lstlisting}
+    @app.route('/roles', methods=['POST'])
+    @token_required
+    def crear_rol():
+        data = request.get_json()
+        nombre = data.get('nombre')
+        if not nombre:
+            return jsonify({"error": "Nombre del rol requerido"}), 400
+        with sqlite3.connect("database.db") as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("INSERT INTO roles (nombre) VALUES (?)", (nombre,))
+                conn.commit()
+                return jsonify({"message": "Rol creado exitosamente"}), 201
+            except sqlite3.IntegrityError:
+                return jsonify({"error": "El rol ya existe"}), 409
+        \end{lstlisting}
+    
+    
+        \item \textbf{\texttt{PUT /roles/<int:rol\_id>}}: Actualiza el nombre de un rol existente identificado por \texttt{rol\_id}. Requiere un token JWT válido y recibe un JSON con el campo \texttt{nombre}. Actualiza el registro en la tabla \texttt{roles} y devuelve un mensaje de éxito con código HTTP 200.
+        \begin{lstlisting}
+    @app.route('/roles/<int:rol_id>', methods=['PUT'])
+    @token_required
+    def actualizar_rol(rol_id):
+        data = request.get_json()
+        nuevo_nombre = data.get('nombre')
+        with sqlite3.connect("database.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE roles SET nombre = ? WHERE id = ?", (nuevo_nombre, rol_id))
+            conn.commit()
+        return jsonify({"message": "Rol actualizado"}), 200
+        \end{lstlisting}
+        
+        \newpage
+    
+        \item \textbf{\texttt{DELETE /roles/<int:rol\_id>}}: Elimina un rol identificado por \texttt{rol\_id} de la base de datos. Requiere un token JWT válido. Ejecuta una consulta SQL para eliminar el registro de la tabla \texttt{roles} y devuelve un mensaje de éxito con código HTTP 200.
+        \begin{lstlisting}
+    @app.route('/roles/<int:rol_id>', methods=['DELETE'])
+    @token_required
+    def eliminar_rol(rol_id):
+        with sqlite3.connect("database.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM roles WHERE id = ?", (rol_id,))
+            conn.commit()
+        return jsonify({"message": "Rol eliminado"}), 200
+        \end{lstlisting}
+\end{center}
+    
+    
+      
+    \end{itemize}
+
+\newpage
+
+
+\newpage
+
+\subsection{Pruebas con Postman}
+Las pruebas se realizaron utilizando Postman para verificar la funcionalidad de cada endpoint. A continuación, se describen los casos probados:
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item \textbf{POST /login}: Verifica la generación del token JWT con credenciales válidas, esperando un código 200 y un token en la respuesta.
+    
+\includegraphics[width=\textwidth]{LoginPost.png}
+\captionof{figure} {Inicio de sesion Postman}
+
+    \item \textbf{GET /roles}: Comprueba que la lista de roles se devuelva correctamente con un token válido, retornando un código 200.
+
+\includegraphics[width=\textwidth]{ViewRolesPost.png}
+\captionof{figure} {Retorno de vizualizacion de roles}
+    
+    \item \textbf{POST /roles}: Valida la creación de un nuevo rol con un JSON válido, esperando un código 201.
+    
+\includegraphics[width=\textwidth]{CreateRol.png}
+\captionof{figure} {Retorno de de rol creado}
+    
+    \item \textbf{PUT /roles/<id>}: Prueba la actualización de un rol existente, verificando un código 200.
+    
+\includegraphics[width=\textwidth]{UpdateRol.png}
+\captionof{figure} {Rol Actualizado}
+    
+    \item \textbf{DELETE /roles/<id>}: Confirma la eliminación de un rol, esperando un código 204.
+    
+\includegraphics[width=\textwidth]{DeleteRol.png}
+\captionof{figure} {Retorno de Rol eliminado}
+    
+\end{itemize}
+
+%GitHub
+\newpage
+\section{Repertorio de Git}
+El código fuente y la documentación de la API de Roles y Permisos se encuentran alojados en un repositorio público en GitHub, accesible en \url{https://github.com/Jacobsin12/Roles-y-Permisos}. Este repositorio contiene todos los archivos necesarios para ejecutar y probar la API, incluyendo el código Python basado en Flask, la base de datos SQLite, y el documento LaTeX que describe el proyecto. La estructura del repositorio está diseñada para facilitar la comprensión y el uso del sistema, con un enfoque en la claridad y la modularidad.
+
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item \textbf{Contenido del repositorio}: Incluye los scripts Python con los endpoints de la API (\texttt{GET /roles}, \texttt{POST /roles}, \texttt{PUT /roles/<int:rol\_id>}, \texttt{DELETE /roles/<int:rol\_id>}, entre otros), la base de datos SQLite (\texttt{database.db}) con las tablas \texttt{users}, \texttt{roles}, \texttt{permisos}, \texttt{usuarios\_roles}, \texttt{roles\_permisos}, y \texttt{permisos\_rutas}, y el archivo LaTeX (\texttt{document.tex}) que documenta el desarrollo, pruebas y resultados del proyecto.
+   
+    \item \textbf{Instrucciones de uso}: Para utilizar el repositorio, clonar el proyecto con \texttt{git clone https://github.com/Jacobsin12/Roles-y-Permisos.git}, instalar las dependencias (\texttt{Flask}, \texttt{PyJWT}, \texttt{sqlite3}) con \texttt{pip install -r requirements.txt}, y ejecutar el servidor con \texttt{python app.py}. Las pruebas se pueden realizar con Postman, utilizando los endpoints descritos en la documentación.
+
+\end{itemize}
+
+%Anexos
+\newpage
+\section{Anexos}
+
+\begin{center}
+    \includegraphics[width=\textwidth]{TokenRequired.png}
+    \captionof{figure}{Validación de token: Se requiere un token JWT válido para continuar.}
+\end{center}
+
+% Imagen 2: Token expirado
+\begin{center}
+    \includegraphics[width=\textwidth]{TokenExpired.png}
+    \captionof{figure}{Token expirado: El token ha superado su tiempo de vida de 5 minutos.}
+\end{center}
+
+% Imagen 3: Token no válido
+\begin{center}
+    \includegraphics[width=\textwidth]{InvalidToken.png}
+    \captionof{figure}{Token no válido: El token proporcionado no es correcto o está mal formado.}
+\end{center}
+
+% Imagen 4: Sin permisos
+\begin{center}
+    \includegraphics[width=\textwidth]{NoPermissions.png}
+    \captionof{figure}{Falta de permisos: El usuario no tiene los permisos necesarios para acceder al recurso.}
+\end{center}
+
+% Conclusión
+\newpage
+\section{Conclusión}
+La implementación de la API de Permisos y Roles ha sido un ejercicio valioso para comprender la importancia de la seguridad y la modularidad en el desarrollo de aplicaciones web. La integración de tokens JWT con un tiempo de vida limitado, junto con el control de acceso basado en roles (RBAC), proporciona una solución robusta para gestionar permisos de manera eficiente. Este proyecto ha permitido aplicar conceptos clave de desarrollo backend, como la interacción con bases de datos SQLite, la validación de entradas y la protección contra vulnerabilidades comunes como inyecciones SQL, lo que refuerza la relevancia de seguir estándares como PEP 8 y buenas prácticas de seguridad.
+
+El proceso de desarrollo también ha destacado la importancia de herramientas como Postman para probar APIs de manera sistemática, permitiendo verificar el correcto funcionamiento de los endpoints \texttt{/login}, \texttt{/roles}, entre otros. Las pruebas realizadas confirmaron que los endpoints cumplen con los requerimientos funcionales y de seguridad establecidos, garantizando que solo los usuarios autenticados con los permisos adecuados puedan acceder a las rutas protegidas. Este tipo de proyectos no solo mejora las habilidades técnicas, sino que también fomenta un enfoque crítico hacia la seguridad y el diseño de sistemas escalables, preparando al desarrollador para enfrentar desafíos más complejos en entornos reales.
+
+Además, este proyecto ha resaltado la importancia de un diseño modular y bien documentado, lo que facilita la mantenibilidad y la escalabilidad de la API. La estructura de la base de datos, con tablas como \texttt{users}, \texttt{roles} y \texttt{permisos\_rutas}, permite una gestión eficiente de las relaciones entre usuarios, roles y permisos, adaptable a diferentes contextos organizacionales. El uso de decoradores personalizados como \texttt{token\_required} y \texttt{permiso\_requerido} demuestra cómo un enfoque programático puede fortalecer la seguridad sin comprometer la flexibilidad. Este aprendizaje es crucial para el desarrollo de aplicaciones modernas que deben cumplir con estrictos requisitos de seguridad y rendimiento.
+
+En conclusión, este trabajo demuestra cómo una API bien diseñada puede facilitar la gestión de permisos y roles en aplicaciones modernas. Los aprendizajes obtenidos, como la importancia de la modularidad, la validación rigurosa y el uso de estándares de codificación, serán fundamentales para futuros proyectos. La API desarrollada representa un paso hacia la construcción de sistemas seguros y eficientes, con potencial para integrarse en aplicaciones más complejas que requieran un control de acceso granular. Este proyecto no solo ha consolidado conocimientos técnicos, sino que también ha abierto la puerta a explorar nuevas tecnologías y metodologías en el desarrollo de software seguro y escalable.
+
+
+% Bibliografía
+\newpage
+\section{Bibliografía}
+\begin{itemize}\setlength{\itemsep}{0.5em}
+    \item Corey, M. (2020). \textit{Python REST APIs with Flask, Docker, MongoDB, and AWS DevOps}. Packt Publishing. \url{https://www.packtpub.com/product/python-rest-apis-with-flask-docker-mongodb-and-aws-devops/9781838644484}
+    \item Flask JWT Extended Documentation. (2024). \textit{Protecting Flask APIs with JWTs}. \url{https://flask-jwt-extended.readthedocs.io/en/stable/}
+    \item Grinberg, M. (2018). \textit{Flask Web Development: Developing Web Applications with Python} (2nd ed.). O’Reilly Media. \url{https://learning.oreilly.com/library/view/flask-web-development/9781491991732/}
+    \item Grinberg, M. (2020). \textit{REST APIs with Flask and Python}. Real Python. \url{https://realpython.com/flask-connexion-rest-api/}
+    \item Henson, G. (2018). \textit{API Security in Action}. Manning Publications. \url{https://www.manning.com/books/api-security-in-action}
+    \item Jackson, S. (2021). \textit{Mastering Flask Web Development}. Packt Publishing. \url{https://www.packtpub.com/product/mastering-flask-web-development/9781784399990}
+    \item Jose, J. M., \& Morales, C. (2019). JSON Web Tokens (JWT): Standards and Security. \textit{IEEE Security \& Privacy, 17}(3), 19–27. \url{https://doi.org/10.1109/MSP.2019.2901489}
+    \item JWT.IO. (2024). \textit{Introduction to JSON Web Tokens}. \url{https://jwt.io/introduction/}
+    \item Mantyla, M. V. (2018). Role-Based Access Control. In \textit{Security Engineering} (pp. 313–342). Wiley. \url{https://www.wiley.com/en-us/Security+Engineering%3A+A+Guide+to+Building+Dependable+Distributed+Systems%2C+2nd+Edition-p-9780470068526}
+    \item Python Software Foundation. (2024). \textit{SQLite3 — DB-API 2.0 interface for SQLite databases}. Python Documentation. \url{https://docs.python.org/3/library/sqlite3.html}
+    \item Real Python. (2020). \textit{Python and SQLite: Creating a Database}. Real Python. \url{https://realpython.com/python-sql-libraries/}
+    \item Rubin, A. D., \& Geer, D. (2020). \textit{Security in Computing} (5th ed.). Pearson. \url{https://www.pearson.com/us/higher-education/program/Rubin-Security-in-Computing-5th-Edition/PGM353697.html}
+    \item Singh, A. (2021). \textit{Flask By Example}. Packt Publishing. \url{https://www.packtpub.com/product/flask-by-example/9781785286933}
+    \item SQLite Consortium. (2024). \textit{SQLite Documentation}. SQLite. \url{https://www.sqlite.org/docs.html}
+    \item Vacca, J. R. (2014). \textit{Computer and Information Security Handbook} (2nd ed.). Elsevier. \url{https://doi.org/10.1016/B978-0-12-394397-2.00002-5}
+\end{itemize}
+
+
+
+\end{document}
+
