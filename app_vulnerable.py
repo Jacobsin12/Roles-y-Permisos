@@ -156,21 +156,28 @@ def permiso_requerido(f):
         if not user_id:
             return jsonify({'error': 'Usuario no autenticado'}), 403
 
-        # Obtener la ruta actual
+        # Obtener la ruta actual    
         ruta = request.path
+
         # Ajustar rutas dinámicas
         if ruta.startswith('/user/') and ruta[6:].isdigit():
             ruta = '/user/<int:user_id>'
         elif ruta.startswith('/user/') and ruta.endswith('/delete'):
             ruta = '/user/<int:user_id>/delete'
+        elif ruta.startswith('/roles/'):
+            partes = ruta.split('/')
+            if len(partes) == 3 and partes[2].isdigit():
+                ruta = '/roles/<int:rol_id>'
 
         with sqlite3.connect("database.db") as conn:
             cursor = conn.cursor()
+
             # Consultar el permiso asociado a la ruta
             cursor.execute("SELECT permiso_nombre FROM permisos_rutas WHERE ruta = ?", (ruta,))
             result = cursor.fetchone()
             if not result:
                 return jsonify({'error': 'Ruta no configurada para permisos'}), 403
+
             permiso_nombre = result[0]
 
             # Verificar si el usuario tiene el permiso
@@ -188,7 +195,6 @@ def permiso_requerido(f):
 
         return f(*args, **kwargs)
     return wrapper
-
 # ----------------------------
 #        RUTAS CRUD USUARIOS
 # ----------------------------
