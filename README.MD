@@ -28,8 +28,10 @@ Esta es una API desarrollada con Flask que implementa autenticación mediante JW
 - Autenticación y autorización con decoradores  
 - Asignación de roles y permisos  
 - Rutas protegidas según los permisos  
-- Borrado lógico de usuarios  
+- Borrado lógico de usuarios 
+- Borrado lógico de roles 
 - CRUD completo de usuarios  
+- CRUD completo de roles 
 
 ## Base de datos  
 Utiliza SQLite (database.db). Se crea automáticamente al ejecutar el archivo principal.  
@@ -43,11 +45,15 @@ DELETE /user/<user_id> — Borrado lógico
 GET /user/<user_id> — Obtener usuario por ID  
 GET /user?username=<username> — Obtener usuario por nombre  
 GET /users-with-permissions — Obtener usuarios junto con roles y permisos  
+GET /roles — Lista todos los roles existentes con sus permisos asociados. Requiere token JWT válido.
+POST /roles — Crea un nuevo rol. Recibe JSON con campo nombre. Requiere token JWT válido.
+PUT /roles/int:rol_id — Actualiza el nombre de un rol existente identificado por rol_id. Requiere token JWT válido.
+DELETE /roles/int:rol_id — Elimina un rol identificado por rol_id. Requiere token JWT válido.
 
 ## Notas  
 Usuario por defecto: admin / 1234  
 Rol por defecto: admin con permiso ver_admin_data  
-El token JWT expira en 1 minuto  
+El token JWT expira en 5 minutos  
 
 ## Seguridad  
 Este proyecto es vulnerable intencionalmente y puede usarse con fines educativos para probar mecanismos de autenticación/autorización, manejo de sesiones y estructura de roles.  
