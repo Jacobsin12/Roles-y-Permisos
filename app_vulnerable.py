@@ -5,7 +5,6 @@ import datetime
 from functools import wraps
 from werkzeug.security import generate_password_hash
 
-
 app = Flask(__name__)
 app.config['DEBUG'] = True
 SECRET_KEY = "supersecreto"
@@ -51,7 +50,6 @@ def init_db():
                 permiso_id INTEGER,
                 UNIQUE(rol_id, permiso_id)
             )""")
-        # Nueva tabla para mapear rutas a permisos
         cursor.execute("""CREATE TABLE IF NOT EXISTS permisos_rutas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ruta TEXT UNIQUE,
@@ -66,7 +64,7 @@ def init_db():
         """)
         cursor.execute("""
             INSERT INTO users (username, password, role)
-            SELECT 'user', 'pass','usuario'
+            SELECT 'user', 'pass', 'usuario'
             WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'user')
         """)
 
@@ -106,7 +104,7 @@ def init_db():
             permiso_id = permiso[0]
             cursor.execute("INSERT OR IGNORE INTO roles_permisos (rol_id, permiso_id) VALUES (?, ?)", (rol_admin_id, permiso_id))
 
-        # Asignar permiso 'ver_usuarios' al rol 'usuario'
+        # As iguardar permiso 'ver_usuarios' al rol 'usuario'
         cursor.execute("SELECT id FROM permisos WHERE nombre = 'ver_usuarios'")
         permiso_ver_usuarios_id = cursor.fetchone()[0]
         cursor.execute("INSERT OR IGNORE INTO roles_permisos (rol_id, permiso_id) VALUES (?, ?)", (rol_user_id, permiso_ver_usuarios_id))
@@ -152,7 +150,7 @@ def permiso_requerido(f):
 
         # Obtener la ruta actual
         ruta = request.path
-        # Ajustar rutas dinámicas (por ejemplo, '/user/1' -> '/user/<int:user_id>')
+        # Ajustar rutas dinámicas
         if ruta.startswith('/user/') and ruta[6:].isdigit():
             ruta = '/user/<int:user_id>'
         elif ruta.startswith('/user/') and ruta.endswith('/delete'):
@@ -187,9 +185,6 @@ def permiso_requerido(f):
 #        RUTAS CRUD USUARIOS
 # ----------------------------
 
-        #-------Iniciar sesion--------
-
-
 @app.route('/login', methods=['POST'])
 def login():
     username = request.form.get('username')
@@ -207,12 +202,6 @@ def login():
         return jsonify({'token': token})
     else:
         return jsonify({"message": "Credenciales inválidas"}), 401
-    
-
-    
-    #-------Registrar a un nuevo usuario --------
-
-
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -221,7 +210,6 @@ def register():
     if not all(field in data for field in fields):
         return jsonify({"error": "Faltan campos"}), 400
 
-    # Hashear la contraseña
     hashed_password = generate_password_hash(data['password'])
 
     try:
@@ -232,7 +220,7 @@ def register():
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
                 data['username'],
-                hashed_password,  # Usamos la contraseña hasheada
+                hashed_password,
                 data['email'],
                 data['birthdate'],
                 data['secret_question'],
@@ -243,15 +231,11 @@ def register():
     except sqlite3.IntegrityError:
         return jsonify({"error": "El nombre de usuario ya existe"}), 409
 
-
 @app.route('/admin/data')
 @token_required
 @permiso_requerido
 def admin_data():
     return jsonify({"data": "Datos confidenciales solo accesibles por admin"})
-
-
-        #-------Actualizar Usuario--------
 
 @app.route('/user/<int:user_id>', methods=['PUT'])
 @token_required
@@ -275,9 +259,6 @@ def update_user(user_id):
         conn.commit()
     return jsonify({"message": "Usuario actualizado"})
 
-
-#-------Baja logica de un Usuario--------
-
 @app.route('/user/<int:user_id>/delete', methods=['DELETE'])
 @token_required
 @permiso_requerido
@@ -287,7 +268,6 @@ def delete_user(user_id):
         cursor.execute("UPDATE users SET status = 'inactive' WHERE id = ?", (user_id,))
         conn.commit()
     return jsonify({"message": "Usuario desactivado (borrado lógico)"})
-
 
 @app.route('/user/<int:user_id>', methods=['GET'])
 @token_required
@@ -310,9 +290,6 @@ def get_user_by_id(user_id):
         else:
             return jsonify({"error": "Usuario no encontrado"}), 404
 
-
-
- #-------Ver/Listar usuarios--------
 @app.route('/users', methods=['GET'])
 @token_required
 @permiso_requerido
@@ -336,9 +313,6 @@ def list_users():
         "role": u[8]
     } for u in users])
 
-
-        #-------Mostrar informacion del usuario que esta logeado--------
-
 @app.route('/user/data', methods=['GET'])
 @token_required
 def user_data():
@@ -358,80 +332,67 @@ def user_data():
             "status": user[4]
         })
 
-
 # ----------------------------
 #        RUTAS CRUD ROLES Y PERMISOS
 # ----------------------------
 
-         #-------Ver/Listar Roles--------
+@app.route('/roles', methods=['GET'])
+@token_required
+@permiso_requerido
+def listar_roles():
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT roles.id, roles.nombre, permisos.nombre
+            FROM roles
+            LEFT JOIN roles_permisos ON roles.id = roles_permisos.rol_id
+            LEFT JOIN permisos ON roles_permisos.permiso_id = permisos.id
+            ORDER BY roles.id
+        """)
+        data = cursor.fetchall()
 
-    @app.route('/roles', methods=['GET'])
-    @token_required
-    @permiso_requerido
-    def listar_roles():
-        with sqlite3.connect("database.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT roles.id, roles.nombre, permisos.nombre
-                FROM roles
-                LEFT JOIN roles_permisos ON roles.id = roles_permisos.rol_id
-                LEFT JOIN permisos ON roles_permisos.permiso_id = permisos.id
-                ORDER BY roles.id
-            """)
-            data = cursor.fetchall()
+        roles_dict = {}
+        for rol_id, rol_nombre, permiso_nombre in data:
+            if rol_id not in roles_dict:
+                roles_dict[rol_id] = {
+                    "id": rol_id,
+                    "nombre": rol_nombre,
+                    "permisos": []
+                }
+            if permiso_nombre:
+                roles_dict[rol_id]["permisos"].append(permiso_nombre)
 
-            roles_dict = {}
-            for rol_id, rol_nombre, permiso_nombre in data:
-                if rol_id not in roles_dict:
-                    roles_dict[rol_id] = {
-                        "id": rol_id,
-                        "nombre": rol_nombre,
-                        "permisos": []
-                    }
-                if permiso_nombre:
-                    roles_dict[rol_id]["permisos"].append(permiso_nombre)
+        roles_lista = list(roles_dict.values())
+        return jsonify(roles_lista), 200
 
-            roles_lista = list(roles_dict.values())
-
-            return jsonify(roles_lista), 200
-
-
-            #-------Crear rol nuevo--------
-
-        @app.route('/roles', methods=['POST'])
-        @token_required
-        @permiso_requerido
-        def crear_rol():
-            data = request.get_json()
-            nombre = data.get('nombre')
-            if not nombre:
-                return jsonify({"error": "Nombre del rol requerido"}), 400
-            with sqlite3.connect("database.db") as conn:
-                cursor = conn.cursor()
-                try:
-                    cursor.execute("INSERT INTO roles (nombre) VALUES (?)", (nombre,))
-                    conn.commit()
-                    return jsonify({"message": "Rol creado exitosamente"}), 201
-                except sqlite3.IntegrityError:
-                    return jsonify({"error": "El rol ya existe"}), 409
-                
-
-        #-------Actualizar Rol--------
-
-    @app.route('/roles/<int:rol_id>', methods=['PUT'])
-    @token_required
-    @permiso_requerido
-    def actualizar_rol(rol_id):
-        data = request.get_json()
-        nuevo_nombre = data.get('nombre')
-        with sqlite3.connect("database.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE roles SET nombre = ? WHERE id = ?", (nuevo_nombre, rol_id))
+@app.route('/roles', methods=['POST'])
+@token_required
+@permiso_requerido
+def crear_rol():
+    data = request.get_json()
+    nombre = data.get('nombre')
+    if not nombre:
+        return jsonify({"error": "Nombre del rol requerido"}), 400
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO roles (nombre) VALUES (?)", (nombre,))
             conn.commit()
-        return jsonify({"message": "Rol actualizado"})
-    
+            return jsonify({"message": "Rol creado exitosamente"}), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": "El rol ya existe"}), 409
 
-        #-------Baja logica de la tabña de roles--------
+@app.route('/roles/<int:rol_id>', methods=['PUT'])
+@token_required
+@permiso_requerido
+def actualizar_rol(rol_id):
+    data = request.get_json()
+    nuevo_nombre = data.get('nombre')
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE roles SET nombre = ? WHERE id = ?", (nuevo_nombre, rol_id))
+        conn.commit()
+    return jsonify({"message": "Rol actualizado"})
 
 @app.route('/roles/<int:rol_id>', methods=['DELETE'])
 @token_required
@@ -439,21 +400,12 @@ def user_data():
 def eliminar_rol(rol_id):
     with sqlite3.connect("database.db") as conn:
         cursor = conn.cursor()
-
-        # Verificar que el rol existe
         cursor.execute("SELECT id FROM roles WHERE id = ?", (rol_id,))
         if not cursor.fetchone():
             return jsonify({"error": "Rol no encontrado"}), 404
-
-        # Actualizar el estado a 'inactivo'
         cursor.execute("UPDATE roles SET status = 'inactivo' WHERE id = ?", (rol_id,))
         conn.commit()
-
     return jsonify({"message": "Rol desactivado correctamente"}), 200
-
-
-
-
 
 # --------------------------
 # MAIN
