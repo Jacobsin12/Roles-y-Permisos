@@ -396,6 +396,7 @@ def crear_rol():
             return jsonify({"message": "Rol creado exitosamente"}), 201
         except sqlite3.IntegrityError:
             return jsonify({"error": "El rol ya existe"}), 409
+        
 
 @app.route('/roles/<int:rol_id>', methods=['PUT'])
 @token_required

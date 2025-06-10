@@ -206,85 +206,92 @@ Para que las rutas con parámetros (ejemplo: \texttt{/user/123}) puedan ser eval
     Estos endpoints gestionan las operaciones relacionadas con roles y permisos. A continuación, se detalla cada endpoint junto con su implementación en Python:
     
     \begin{itemize}\setlength{\itemsep}{0.5em}
-        \item \textbf{\texttt{GET /roles}}: Lista todos los roles existentes en el sistema, incluyendo sus permisos asociados. Requiere un token JWT válido, pero no permisos adicionales. Realiza una consulta SQL que une las tablas \texttt{roles}, \texttt{roles\_permisos} y \texttt{permisos}, organizando los resultados en un diccionario JSON con el \texttt{id}, \texttt{nombre} y lista de \texttt{permisos} de cada rol. Devuelve un código HTTP 200 con la lista de roles.
+ \item \textbf{\texttt{GET /roles}}: Lista todos los roles existentes en el sistema, incluyendo sus permisos asociados. Requiere un token JWT válido y el permiso \texttt{ver\_roles}. Realiza una consulta SQL que une las tablas \texttt{roles}, \texttt{roles\_permisos} y \texttt{permisos}, organizando los resultados en un diccionario JSON con el \texttt{id}, \texttt{nombre} y lista de \texttt{permisos} de cada rol. Devuelve un código HTTP 200 con la lista de roles.
         \begin{center}
         \begin{lstlisting}
     @app.route('/roles', methods=['GET'])
-    @token_required
-    def listar_roles():
-        with sqlite3.connect("database.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT roles.id, roles.nombre, permisos.nombre
-                FROM roles
-                LEFT JOIN roles_permisos ON roles.id = roles_permisos.rol_id
-                LEFT JOIN permisos ON roles_permisos.permiso_id = permisos.id
-                ORDER BY roles.id
-            """)
-            data = cursor.fetchall()
-    
-            roles_dict = {}
-            for rol_id, rol_nombre, permiso_nombre in data:
-                if rol_id not in roles_dict:
-                    roles_dict[rol_id] = {
-                        "id": rol_id,
-                        "nombre": rol_nombre,
-                        "permisos": []
-                    }
-                if permiso_nombre:
-                    roles_dict[rol_id]["permisos"].append(permiso_nombre)
-    
-            roles_lista = list(roles_dict.values())
-            return jsonify(roles_lista), 200
+@token_required
+@permiso_requerido
+def listar_roles():
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT roles.id, roles.nombre, permisos.nombre
+            FROM roles
+            LEFT JOIN roles_permisos ON roles.id = roles_permisos.rol_id
+            LEFT JOIN permisos ON roles_permisos.permiso_id = permisos.id
+            ORDER BY roles.id
+        """)
+        data = cursor.fetchall()
+
+        roles_dict = {}
+        for rol_id, rol_nombre, permiso_nombre in data:
+            if rol_id not in roles_dict:
+                roles_dict[rol_id] = {
+                    "id": rol_id,
+                    "nombre": rol_nombre,
+                    "permisos": []
+                }
+            if permiso_nombre:
+                roles_dict[rol_id]["permisos"].append(permiso_nombre)
+
+        roles_lista = list(roles_dict.values())
+        return jsonify(roles_lista), 200
         \end{lstlisting}
     \newpage
     
         \item \textbf{\texttt{POST /roles}}: Crea un nuevo rol en el sistema. Requiere un token JWT válido y recibe un JSON con el campo \texttt{nombre}. Valida que el nombre no esté vacío y verifica que no exista un rol con el mismo nombre en la base de datos. Devuelve un código HTTP 201 si se crea exitosamente, 400 si falta el nombre, o 409 si el rol ya existe.
         \begin{lstlisting}
     @app.route('/roles', methods=['POST'])
-    @token_required
-    def crear_rol():
-        data = request.get_json()
-        nombre = data.get('nombre')
-        if not nombre:
-            return jsonify({"error": "Nombre del rol requerido"}), 400
-        with sqlite3.connect("database.db") as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("INSERT INTO roles (nombre) VALUES (?)", (nombre,))
-                conn.commit()
-                return jsonify({"message": "Rol creado exitosamente"}), 201
-            except sqlite3.IntegrityError:
-                return jsonify({"error": "El rol ya existe"}), 409
+@token_required
+@permiso_requerido
+def crear_rol():
+    data = request.get_json()
+    nombre = data.get('nombre')
+    if not nombre:
+        return jsonify({"error": "Nombre del rol requerido"}), 400
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO roles (nombre) VALUES (?)", (nombre,))
+            conn.commit()
+            return jsonify({"message": "Rol creado exitosamente"}), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": "El rol ya existe"}), 409
         \end{lstlisting}
     
     
         \item \textbf{\texttt{PUT /roles/<int:rol\_id>}}: Actualiza el nombre de un rol existente identificado por \texttt{rol\_id}. Requiere un token JWT válido y recibe un JSON con el campo \texttt{nombre}. Actualiza el registro en la tabla \texttt{roles} y devuelve un mensaje de éxito con código HTTP 200.
         \begin{lstlisting}
-    @app.route('/roles/<int:rol_id>', methods=['PUT'])
-    @token_required
-    def actualizar_rol(rol_id):
-        data = request.get_json()
-        nuevo_nombre = data.get('nombre')
-        with sqlite3.connect("database.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE roles SET nombre = ? WHERE id = ?", (nuevo_nombre, rol_id))
-            conn.commit()
-        return jsonify({"message": "Rol actualizado"}), 200
+@app.route('/roles/<int:rol_id>', methods=['PUT'])
+@token_required
+@permiso_requerido
+def actualizar_rol(rol_id):
+    data = request.get_json()
+    nuevo_nombre = data.get('nombre')
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE roles SET nombre = ? WHERE id = ?", (nuevo_nombre, rol_id))
+        conn.commit()
+    return jsonify({"message": "Rol actualizado"})
         \end{lstlisting}
         
         \newpage
     
         \item \textbf{\texttt{DELETE /roles/<int:rol\_id>}}: Elimina un rol identificado por \texttt{rol\_id} de la base de datos. Requiere un token JWT válido. Ejecuta una consulta SQL para eliminar el registro de la tabla \texttt{roles} y devuelve un mensaje de éxito con código HTTP 200.
         \begin{lstlisting}
-    @app.route('/roles/<int:rol_id>', methods=['DELETE'])
-    @token_required
-    def eliminar_rol(rol_id):
-        with sqlite3.connect("database.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM roles WHERE id = ?", (rol_id,))
-            conn.commit()
-        return jsonify({"message": "Rol eliminado"}), 200
+@app.route('/roles/<int:rol_id>', methods=['DELETE'])
+@token_required
+@permiso_requerido
+def eliminar_rol(rol_id):
+    with sqlite3.connect("database.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM roles WHERE id = ?", (rol_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Rol no encontrado"}), 404
+        cursor.execute("UPDATE roles SET status = 'inactivo' WHERE id = ?", (rol_id,))
+        conn.commit()
+    return jsonify({"message": "Rol desactivado correctamente"}), 200
         \end{lstlisting}
 \end{center}
     
@@ -402,4 +409,3 @@ En conclusión, este trabajo demuestra cómo una API bien diseñada puede facili
 
 
 \end{document}
-
