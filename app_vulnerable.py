@@ -4,6 +4,7 @@ import jwt
 import datetime
 from functools import wraps
 from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
 app.config['DEBUG'] = True
@@ -56,17 +57,22 @@ def init_db():
                 permiso_nombre TEXT
             )""")
     
-        # Insertar usuarios si no existen
+ # Hashear contraseñas
+        hashed_admin_password = generate_password_hash('0000')
+        hashed_user_password = generate_password_hash('pass')
+
+        # Insertar usuarios si no existen, con contraseñas hasheadas
         cursor.execute("""
             INSERT INTO users (username, password, email, birthdate, secret_question, secret_answer, role) 
-            SELECT 'admin', '0000', 'jaco@gmail.com', '2002-07-02', '¿Color favorito?', 'azul', 'admin'
+            SELECT 'admin', ?, 'jaco@gmail.com', '2002-07-02', '¿Color favorito?', 'azul', 'admin'
             WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin')
-        """)
+        """, (hashed_admin_password,))
+        
         cursor.execute("""
             INSERT INTO users (username, password, role)
-            SELECT 'user', 'pass', 'usuario'
+            SELECT 'user', ?, 'usuario'
             WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'user')
-        """)
+        """, (hashed_user_password,))
 
         # Insertar roles y permisos básicos
         cursor.execute("INSERT OR IGNORE INTO roles (nombre) VALUES ('admin'), ('usuario')")
@@ -78,7 +84,8 @@ def init_db():
                 ('ver_roles'),
                 ('crear_usuarios'),
                 ('modificar_usuarios'),
-                ('eliminar_usuarios')
+                ('eliminar_usuarios'),
+                ('eliminar_roles')  -- Nuevo permiso para eliminar roles
         """)
 
         # Obtener IDs de usuarios
@@ -104,7 +111,7 @@ def init_db():
             permiso_id = permiso[0]
             cursor.execute("INSERT OR IGNORE INTO roles_permisos (rol_id, permiso_id) VALUES (?, ?)", (rol_admin_id, permiso_id))
 
-        # As iguardar permiso 'ver_usuarios' al rol 'usuario'
+        # Asignar permiso 'ver_usuarios' al rol 'usuario'
         cursor.execute("SELECT id FROM permisos WHERE nombre = 'ver_usuarios'")
         permiso_ver_usuarios_id = cursor.fetchone()[0]
         cursor.execute("INSERT OR IGNORE INTO roles_permisos (rol_id, permiso_id) VALUES (?, ?)", (rol_user_id, permiso_ver_usuarios_id))
@@ -116,7 +123,8 @@ def init_db():
                 ('/admin/data', 'ver_admin_data'),
                 ('/roles', 'ver_roles'),
                 ('/user/<int:user_id>', 'modificar_usuarios'),
-                ('/user/<int:user_id>/delete', 'eliminar_usuarios')
+                ('/user/<int:user_id>/delete', 'eliminar_usuarios'),
+                ('/roles/<int:rol_id>', 'eliminar_roles')  -- Nueva entrada para DELETE /roles/<int:rol_id>
         """)
 
         conn.commit()
@@ -189,12 +197,13 @@ def permiso_requerido(f):
 def login():
     username = request.form.get('username')
     password = request.form.get('password')
+
     with sqlite3.connect("database.db") as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE username = ? AND password = ?", (username, password))
+        cursor.execute("SELECT id, password FROM users WHERE username = ?", (username,))
         user = cursor.fetchone()
 
-    if user:
+    if user and check_password_hash(user[1], password):
         token = jwt.encode({
             'user_id': user[0],
             'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1)
